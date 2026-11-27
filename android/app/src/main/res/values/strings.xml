@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Christmas Wishlist</string>
+    <string name="title_activity_main">Christmas Wishlist</string>
+    <string name="package_name">com.macorol.christmaswishlist</string>
+    <string name="custom_url_scheme">com.macorol.christmaswishlist</string>
+</resources>

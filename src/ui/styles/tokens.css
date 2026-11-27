@@ -1,0 +1,59 @@
+:root {
+  /* Core Holiday Cardstock Palette */
+  --color-cream: #fff8f0;
+  --color-peach: #ffdec3;
+  --color-peach-soft: #fff0e2;
+  --color-surface: #ffffff;
+  --color-surface-subtle: #fcf4ea;
+
+  --color-ink: #101010;
+  --color-ink-muted: #5c4b43;
+  --color-ink-on-peach: #46332b;
+
+  --color-pine: #008042;
+  --color-pine-hover: #006835;
+  --color-pine-soft: #e7f5ed;
+  --color-pine-ink: #005c2f;
+
+  --color-cranberry: #c73213;
+  --color-cranberry-hover: #a7270d;
+  --color-cranberry-soft: #fdece8;
+  --color-cranberry-ink: #9f230a;
+
+  --color-border-warm: #ead4c0;
+  --color-border-strong: #d8baa0;
+
+  /* Typography */
+  --font-sans: 'Figtree', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --text-xs: 0.8125rem;
+  --text-sm: 0.9375rem;
+  --text-base: 1.0625rem;
+  --text-md: 1.1875rem;
+  --text-lg: 1.25rem;
+  --text-xl: 1.625rem;
+  --text-2xl: 1.875rem;
+
+  /* Radii */
+  --radius-nested: 12px;
+  --radius-card: 16px;
+  --radius-pill: 9999px;
+
+  /* Spacing & Layout */
+  --container-max: 34rem;
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.25rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+
+  /* Elevation (single-layer ambient shadow; flat containers use tint or border instead) */
+  --shadow-card: 0 8px 24px rgba(16, 16, 16, 0.06);
+  --shadow-card-hover: 0 12px 28px rgba(16, 16, 16, 0.09);
+
+  /* Motion */
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --duration-fast: 160ms;
+  --duration-normal: 220ms;
+}

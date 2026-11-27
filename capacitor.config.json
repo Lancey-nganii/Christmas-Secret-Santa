@@ -1,0 +1,24 @@
+{
+  "appId": "com.macorol.christmaswishlist",
+  "appName": "Christmas Wishlist",
+  "webDir": "dist",
+  "backgroundColor": "#FFF8F0",
+  "server": {
+    "androidScheme": "https"
+  },
+  "android": {
+    "backgroundColor": "#FFF8F0"
+  },
+  "plugins": {
+    "SystemBars": {
+      "insetsHandling": "css",
+      "initialViewportFitValueHint": "cover",
+      "style": "LIGHT"
+    },
+    "StatusBar": {
+      "overlaysWebView": false,
+      "style": "LIGHT",
+      "backgroundColor": "#FFF8F0"
+    }
+  }
+}
