@@ -4,6 +4,7 @@ import type {
   GiftStatus,
   NormalizedGiftInput,
   PickGiftResult,
+  PickedGiftSummary,
   UndoPickResult,
   WishlistView,
 } from '../../domain/models';
@@ -27,6 +28,7 @@ interface RawFamilyPayload {
     username?: string;
     is_organizer?: boolean;
     gift_count: number;
+    pick_count?: number;
   };
   relatives: RawRelativeRow[];
 }
@@ -50,6 +52,17 @@ interface RawWishlistPayload {
   is_own_wishlist: boolean;
   viewer_picked_gift_id: string | null;
   gifts: RawGiftRow[];
+}
+
+interface RawPickedGiftRow {
+  pick_id: string;
+  picked_at: string;
+  recipient_member_id: string;
+  recipient_display_name: string;
+  gift_id: string;
+  gift_name: string;
+  gift_note: string | null;
+  store_url: string | null;
 }
 
 function mapGiftRow(row: RawGiftRow): GiftItem {
@@ -85,6 +98,7 @@ export class SupabaseWishlistGateway implements WishlistGateway {
         username: payload.viewer.username ?? '',
         isOrganizer: Boolean(payload.viewer.is_organizer),
         giftCount: payload.viewer.gift_count,
+        pickCount: payload.viewer.pick_count ?? 0,
       },
       relatives: payload.relatives.map((r) => ({
         memberId: r.member_id,
@@ -111,6 +125,24 @@ export class SupabaseWishlistGateway implements WishlistGateway {
       viewerPickedGiftId: payload.viewer_picked_gift_id,
       gifts: payload.gifts.map(mapGiftRow),
     };
+  }
+
+  async getMyPicks(): Promise<readonly PickedGiftSummary[]> {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase.rpc('get_my_picks');
+    if (error) throw mapRpcError(error);
+
+    const payload = data as { picks?: RawPickedGiftRow[] };
+    return (payload.picks ?? []).map((row) => ({
+      pickId: row.pick_id,
+      pickedAt: row.picked_at,
+      recipientMemberId: row.recipient_member_id,
+      recipientDisplayName: row.recipient_display_name,
+      giftId: row.gift_id,
+      giftName: row.gift_name,
+      giftNote: row.gift_note,
+      storeUrl: row.store_url,
+    }));
   }
 
   async addGift(input: NormalizedGiftInput): Promise<GiftItem> {

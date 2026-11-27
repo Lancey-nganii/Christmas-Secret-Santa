@@ -18,6 +18,7 @@ interface MyWishlistScreenProps {
   onRefresh: () => Promise<void>;
   onAddGift: () => void;
   onEditGift: (gift: GiftItem) => void;
+  onGiftRemoved?: (giftId: string) => void;
 }
 
 export function MyWishlistScreen({
@@ -30,6 +31,7 @@ export function MyWishlistScreen({
   onRefresh,
   onAddGift,
   onEditGift,
+  onGiftRemoved,
 }: MyWishlistScreenProps) {
   const { wishlist: wishlistGateway, externalLinks } = useServices();
   const [confirmRemoveId, setConfirmRemoveId] = useState<string | null>(null);
@@ -43,7 +45,8 @@ export function MyWishlistScreen({
     try {
       await wishlistGateway.removeGift(gift.id);
       setConfirmRemoveId(null);
-      await onRefresh();
+      onGiftRemoved?.(gift.id);
+      void onRefresh();
     } catch (err) {
       setConfirmRemoveId(null);
       setActionError(

@@ -24,7 +24,7 @@ Invite-only single-family Christmas wishlist coordinator with database-enforced 
 
 ## Operating Context
 
-Family members sign in once with their family username and password (`SignInScreen`) and remain signed in persistently on their device/browser (`localStorage` + auto-refreshing tokens), switch between **Family** and **My Wishlist** tabs, add or update unpicked gifts (name, optional note, optional store link), and tap **I'll buy this** or **Undo** on relatives' lists. The designated family organizer (`is_organizer`) also has a **Manage family** view (`/family/manage`) to add new relatives and reset passwords directly in the app. The client refreshes when views open, when the app returns to the foreground, about every 15 seconds while visible, and immediately after writes or conflicts.
+Family members sign in once with their family username and password (`SignInScreen`) and remain signed in persistently on their device/browser (`localStorage` + auto-refreshing tokens), switch between **Family**, **Gifts Picked**, and **My Wishlist** tabs, add or update unpicked gifts (name, optional note, optional store link), tap **I'll buy this** or **Undo** on relatives' lists, and review all gifts they've claimed across relatives inside **Gifts Picked**. The designated family organizer (`is_organizer`) also has a **Manage family** view (`/family/manage`) to add new relatives and reset passwords directly in the app. Clients receive instant WebSocket updates via private Supabase Realtime database broadcasts (`realtime.send`), with foreground resume and 15-second background polling as resilient fallbacks.
 
 ## Capabilities and Constraints
 
@@ -32,9 +32,9 @@ Family members sign in once with their family username and password (`SignInScre
 - One wishlist per member; members cannot pick gifts from their own list.
 - Each gift allows at most one active pick; each giver allows at most one active pick per recipient.
 - Picked gifts keep their original creation-time display order and remain locked against edits or removal while a pick exists.
-- Viewers other than the giver (including the wishlist owner) see **Already picked** with a red strike-through and no giver identity; only the giver sees **You picked this**, **Undo**, and holds the specific `pick_id`.
+- Viewers other than the giver (including the wishlist owner) see **Already picked** with a red strike-through and no giver identity; only the giver sees **You picked this**, **Undo**, their personal **Gifts Picked** shopping summary (`get_my_picks`), and holds the specific `pick_id`.
 - Store links are optional and accept only `http://` or `https://` URLs.
-- Base tables remain private behind PostgreSQL database functions (`get_family`, `get_wishlist`, `add_gift`, `update_gift`, `remove_gift`, `pick_gift`, `undo_pick`) plus an organizer-guarded Edge Function (`manage-member`); no Firebase push notifications in v1.
+- Base tables remain private behind PostgreSQL database functions (`get_family`, `get_wishlist`, `get_my_picks`, `add_gift`, `update_gift`, `remove_gift`, `pick_gift`, `undo_pick`), a private per-family Realtime Broadcast channel (`realtime.messages` RLS), and an organizer-guarded Edge Function (`manage-member`); no Firebase push notifications in v1.
 
 ## Brand Commitments
 

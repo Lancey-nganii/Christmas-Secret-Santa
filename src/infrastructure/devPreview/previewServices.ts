@@ -2,11 +2,13 @@ import { AppError } from '../../domain/errors';
 import type {
   FamilyMemberAccount,
   FamilyOverview,
+  FamilySyncEvent,
   GiftItem,
   GiftStatus,
   NormalizedGiftInput,
   NormalizedNewMemberInput,
   PickGiftResult,
+  PickedGiftSummary,
   UndoPickResult,
   WishlistView,
 } from '../../domain/models';
@@ -15,6 +17,7 @@ import type {
   AuthGateway,
   AuthSessionUser,
   MemberManagementGateway,
+  RealtimeGateway,
   WishlistGateway,
 } from '../../domain/ports';
 import { normalizeUsername, usernameToAuthEmail } from '../../domain/validation';
@@ -36,12 +39,22 @@ interface StoredPick {
   giftId: string;
   giverMemberId: string;
   recipientMemberId: string;
+  pickedAt: string;
 }
 
 const PREVIEW_USER: AuthSessionUser = {
   id: 'preview-auth-ana',
   email: 'ana@macorol.wishlist',
 };
+
+const previewRealtimeEmitters = new WeakMap<RealtimeGateway, (event: FamilySyncEvent) => void>();
+
+export function emitPreviewRealtimeEvent(
+  realtime: RealtimeGateway,
+  event: FamilySyncEvent
+): void {
+  previewRealtimeEmitters.get(realtime)?.(event);
+}
 
 export function createPreviewServices(previewMode: string): AppServices {
   const viewerId = 'member-ana';
@@ -50,6 +63,23 @@ export function createPreviewServices(previewMode: string): AppServices {
   let currentUser: AuthSessionUser | null =
     previewMode === 'signin' ? null : PREVIEW_USER;
   const authListeners = new Set<(user: AuthSessionUser | null) => void>();
+  const syncListeners = new Set<(event: FamilySyncEvent) => void>();
+
+  const emitSync = (event: FamilySyncEvent) => {
+    for (const listener of syncListeners) {
+      listener(event);
+    }
+  };
+
+  const realtime: RealtimeGateway = {
+    subscribeToFamily(_familyId, handlers) {
+      syncListeners.add(handlers.onSync);
+      return () => {
+        syncListeners.delete(handlers.onSync);
+      };
+    },
+  };
+  previewRealtimeEmitters.set(realtime, emitSync);
 
   const membersList: Array<{
     id: string;
@@ -154,18 +184,21 @@ export function createPreviewServices(previewMode: string): AppServices {
       giftId: 'gift-ana-1',
       giverMemberId: 'member-mom',
       recipientMemberId: 'member-ana',
+      pickedAt: '2026-11-24T09:00:00Z',
     },
     {
       id: 'pick-mom-marco',
       giftId: 'gift-mom-1',
       giverMemberId: 'member-marco',
       recipientMemberId: 'member-mom',
+      pickedAt: '2026-11-24T10:00:00Z',
     },
     {
       id: 'pick-dad-ana',
       giftId: 'gift-dad-1',
       giverMemberId: 'member-ana',
       recipientMemberId: 'member-dad',
+      pickedAt: '2026-11-24T11:00:00Z',
     },
   ];
 
@@ -222,6 +255,7 @@ export function createPreviewServices(previewMode: string): AppServices {
     async getFamily(): Promise<FamilyOverview> {
       const viewer = membersList.find((m) => m.id === viewerId)!;
       const viewerGifts = gifts.filter((g) => g.ownerMemberId === viewerId);
+      const viewerPickCount = picks.filter((p) => p.giverMemberId === viewerId).length;
       const relatives = membersList
         .filter((m) => m.id !== viewerId)
         .sort((a, b) => a.displayName.localeCompare(b.displayName))
@@ -247,6 +281,7 @@ export function createPreviewServices(previewMode: string): AppServices {
           username: viewer.username,
           isOrganizer: viewer.isOrganizer,
           giftCount: viewerGifts.length,
+          pickCount: viewerPickCount,
         },
         relatives,
       };
@@ -278,6 +313,33 @@ export function createPreviewServices(previewMode: string): AppServices {
       };
     },
 
+    async getMyPicks(): Promise<readonly PickedGiftSummary[]> {
+      return picks
+        .filter((p) => p.giverMemberId === viewerId)
+        .map((pick) => {
+          const gift = gifts.find((g) => g.id === pick.giftId);
+          const recipient = membersList.find((m) => m.id === pick.recipientMemberId);
+          if (!gift || !recipient) return null;
+          return {
+            pickId: pick.id,
+            pickedAt: pick.pickedAt,
+            recipientMemberId: recipient.id,
+            recipientDisplayName: recipient.displayName,
+            giftId: gift.id,
+            giftName: gift.name,
+            giftNote: gift.note,
+            storeUrl: gift.storeUrl,
+          };
+        })
+        .filter((item): item is PickedGiftSummary => item !== null)
+        .sort(
+          (a, b) =>
+            a.recipientDisplayName.localeCompare(b.recipientDisplayName) ||
+            a.pickedAt.localeCompare(b.pickedAt) ||
+            a.pickId.localeCompare(b.pickId)
+        );
+    },
+
     async addGift(input: NormalizedGiftInput): Promise<GiftItem> {
       const now = new Date().toISOString();
       const created: StoredGift = {
@@ -290,6 +352,7 @@ export function createPreviewServices(previewMode: string): AppServices {
         updatedAt: now,
       };
       gifts.push(created);
+      emitSync({ scope: 'wishlist', memberId: viewerId });
       return toGiftItem(created, true, null);
     },
 
@@ -308,6 +371,7 @@ export function createPreviewServices(previewMode: string): AppServices {
       existing.note = input.note;
       existing.storeUrl = input.storeUrl;
       existing.updatedAt = new Date().toISOString();
+      emitSync({ scope: 'wishlist', memberId: viewerId });
       return toGiftItem(existing, true, null);
     },
 
@@ -321,6 +385,7 @@ export function createPreviewServices(previewMode: string): AppServices {
         );
       }
       gifts.splice(idx, 1);
+      emitSync({ scope: 'wishlist', memberId: viewerId });
     },
 
     async pickGift(giftId: string): Promise<PickGiftResult> {
@@ -363,8 +428,10 @@ export function createPreviewServices(previewMode: string): AppServices {
         giftId,
         giverMemberId: viewerId,
         recipientMemberId: target.ownerMemberId,
+        pickedAt: new Date().toISOString(),
       };
       picks.push(newPick);
+      emitSync({ scope: 'wishlist', memberId: target.ownerMemberId });
       return {
         outcome: 'picked',
         idempotent: false,
@@ -381,6 +448,7 @@ export function createPreviewServices(previewMode: string): AppServices {
       }
       const removed = picks[idx]!;
       picks.splice(idx, 1);
+      emitSync({ scope: 'wishlist', memberId: removed.recipientMemberId });
       return {
         outcome: 'undone',
         pickId: removed.id,
@@ -421,6 +489,7 @@ export function createPreviewServices(previewMode: string): AppServices {
         isOrganizer: false,
       };
       membersList.push(created);
+      emitSync({ scope: 'family', memberId: created.id });
       return {
         memberId: created.id,
         displayName: created.displayName,
@@ -441,6 +510,7 @@ export function createPreviewServices(previewMode: string): AppServices {
   if (previewMode === 'my-wishlist') previewRouteHint = '/my-wishlist';
   else if (previewMode === 'add-gift') previewRouteHint = '/my-wishlist/new';
   else if (previewMode === 'relative') previewRouteHint = '/family/member-mom';
+  else if (previewMode === 'picks') previewRouteHint = '/picks';
   else if (previewMode === 'manage-family') previewRouteHint = '/family/manage';
   else if (previewMode === 'family') previewRouteHint = '/family';
 
@@ -448,6 +518,7 @@ export function createPreviewServices(previewMode: string): AppServices {
     auth,
     wishlist,
     members,
+    realtime,
     lifecycle: new BrowserLifecycleAdapter(),
     externalLinks: new BrowserExternalLinkAdapter(),
     isPreviewMode: true,

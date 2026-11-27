@@ -5,11 +5,11 @@ A shared, invite-only family Christmas wishlist app built with **React**, **Type
 ## Architecture Overview
 
 - `src/domain/`: Pure domain models, validation rules, error codes, and port interfaces (framework-free).
-- `src/infrastructure/`: Supabase username/password Auth (`signInWithPassword` backed by `<username>@macorol.wishlist`), RPC wishlist adapter, organizer member-management Edge Function adapter, browser/platform lifecycle adapters, plus a dev-only preview adapter (`?preview=family`).
-- `src/application/`: Session persistence/resume (`useAuthSession`) and synchronized polling/foreground-refresh hooks (`useSynchronizedResource`).
+- `src/infrastructure/`: Supabase username/password Auth (`signInWithPassword` backed by `<username>@macorol.wishlist`), RPC wishlist adapter, private Realtime Broadcast adapter (`realtimeGateway.ts`), organizer member-management Edge Function adapter, browser/platform lifecycle adapters, plus a dev-only preview adapter (`?preview=family`).
+- `src/application/`: Session persistence/resume (`useAuthSession`), private Realtime coalescing (`useFamilyRealtime`), and synchronized optimistic/polling hooks (`useSynchronizedResource`).
 - `src/ui/`: Design tokens (`tokens.css`), typography (`fonts.css`), geometric `<HollyEmblem />`, and accessible UI primitives.
-- `src/features/` & `src/app/`: Core screens (`Sign in`, `Family`, `Manage family`, `My Wishlist`, `Add or edit a gift`, `Relative's wishlist`) and URL routing.
-- `supabase/migrations/`: Complete PostgreSQL schema (`app_private` schema, constraints, indexes, RLS), authenticated RPC API (`get_family`, `get_wishlist`, `add_gift`, `update_gift`, `remove_gift`, `pick_gift`, `undo_pick`), and organizer `service_role` helpers (`admin_get_organizer_context`, `admin_list_family_members`, `admin_create_family_member`).
+- `src/features/` & `src/app/`: Core screens (`Sign in`, `Family`, `Gifts Picked`, `Manage family`, `My Wishlist`, `Add or edit a gift`, `Relative's wishlist`) and URL routing.
+- `supabase/migrations/`: Complete PostgreSQL schema (`app_private` schema, constraints, indexes, RLS), authenticated RPC API (`get_family`, `get_wishlist`, `get_my_picks`, `add_gift`, `update_gift`, `remove_gift`, `pick_gift`, `undo_pick`), private Realtime Broadcast triggers (`realtime.send`), and organizer `service_role` helpers (`admin_get_organizer_context`, `admin_list_family_members`, `admin_create_family_member`).
 - `supabase/functions/manage-member/`: Organizer-authenticated Edge Function for creating family accounts and resetting passwords.
 
 ## Supabase Setup Checklist
@@ -40,6 +40,7 @@ While developing without a live signed-in family session, `import.meta.env.DEV` 
 
 - `http://localhost:5185/?preview=signin`
 - `http://localhost:5185/?preview=family`
+- `http://localhost:5185/?preview=picks`
 - `http://localhost:5185/?preview=manage-family`
 - `http://localhost:5185/?preview=my-wishlist`
 - `http://localhost:5185/?preview=add-gift`

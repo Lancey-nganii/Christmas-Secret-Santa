@@ -1,13 +1,16 @@
 import { Component, useCallback, useState, type ErrorInfo, type ReactNode } from 'react';
 import { ServiceProvider, useServices } from '../application/ServiceContext';
 import { useAuthSession } from '../application/useAuthSession';
+import { useFamilyRealtime } from '../application/useFamilyRealtime';
 import { useSynchronizedResource } from '../application/useSynchronizedResource';
+import type { GiftItem, PickedGiftSummary } from '../domain/models';
 import type { AppServices } from '../domain/ports';
 import { SignInScreen } from '../features/auth/SignInScreen';
 import { FamilyScreen } from '../features/family/FamilyScreen';
 import { ManageFamilyScreen } from '../features/family/ManageFamilyScreen';
 import { GiftFormScreen } from '../features/my-wishlist/GiftFormScreen';
 import { MyWishlistScreen } from '../features/my-wishlist/MyWishlistScreen';
+import { GiftsPickedScreen } from '../features/picks/GiftsPickedScreen';
 import { RelativeWishlistScreen } from '../features/relative-wishlist/RelativeWishlistScreen';
 import { AppShell, type MainTab } from '../features/shell/AppShell';
 import { Button } from '../ui/components/Button';
@@ -32,28 +35,64 @@ function AuthenticatedWorkspace({ onSignOut }: AuthenticatedWorkspaceProps) {
   );
 
   const familyData = familyQuery.data;
+  const familyId = familyData?.family.id ?? null;
   const viewerId = familyData?.viewer.memberId ?? null;
   const isOrganizer = Boolean(familyData?.viewer.isOrganizer);
+  const relativeMemberId = route.screen === 'relative' ? route.memberId : null;
 
-  const targetWishlistMemberId =
-    route.screen === 'relative'
-      ? route.memberId
-      : route.screen === 'my-wishlist' ||
-          route.screen === 'add-gift' ||
-          route.screen === 'edit-gift'
-        ? viewerId
-        : null;
-
-  const wishlistQuery = useSynchronizedResource(
-    useCallback(async () => {
-      if (!targetWishlistMemberId) {
-        throw new Error('Missing wishlist member ID');
-      }
-      return wishlist.getWishlist(targetWishlistMemberId);
-    }, [targetWishlistMemberId, wishlist]),
-    `wishlist:${targetWishlistMemberId ?? 'none'}`,
-    { enabled: targetWishlistMemberId !== null }
+  const myPicksQuery = useSynchronizedResource(
+    useCallback(() => wishlist.getMyPicks(), [wishlist]),
+    `my-picks:${viewerId ?? 'none'}`,
+    { enabled: viewerId !== null }
   );
+
+  const myWishlistQuery = useSynchronizedResource(
+    useCallback(async () => {
+      if (!viewerId) {
+        throw new Error('Missing viewer member ID');
+      }
+      return wishlist.getWishlist(viewerId);
+    }, [viewerId, wishlist]),
+    `my-wishlist:${viewerId ?? 'none'}`,
+    { enabled: viewerId !== null }
+  );
+
+  const relativeWishlistQuery = useSynchronizedResource(
+    useCallback(async () => {
+      if (!relativeMemberId) {
+        throw new Error('Missing relative member ID');
+      }
+      return wishlist.getWishlist(relativeMemberId);
+    }, [relativeMemberId, wishlist]),
+    `relative-wishlist:${relativeMemberId ?? 'none'}`,
+    { enabled: relativeMemberId !== null }
+  );
+
+  useFamilyRealtime(familyId, {
+    onSync: (batch) => {
+      void familyQuery.refreshNow();
+      if (viewerId !== null) {
+        if (batch.hasWishlistEvent || batch.wildcard) {
+          void myPicksQuery.refreshNow();
+        }
+        if (batch.wildcard || batch.memberIds.has(viewerId)) {
+          void myWishlistQuery.refreshNow();
+        }
+      }
+      if (relativeMemberId !== null && (batch.wildcard || batch.memberIds.has(relativeMemberId))) {
+        void relativeWishlistQuery.refreshNow();
+      }
+    },
+    onReconnect: () => {
+      void familyQuery.refreshNow();
+      if (viewerId !== null) {
+        void Promise.all([myPicksQuery.refreshNow(), myWishlistQuery.refreshNow()]);
+      }
+      if (relativeMemberId !== null) {
+        void relativeWishlistQuery.refreshNow();
+      }
+    },
+  });
 
   const handleSignOut = async () => {
     navigate({ screen: 'family' });
@@ -80,16 +119,20 @@ function AuthenticatedWorkspace({ onSignOut }: AuthenticatedWorkspaceProps) {
   }
 
   const activeTab: MainTab =
-    route.screen === 'family' ||
-    route.screen === 'relative' ||
-    route.screen === 'manage-family'
-      ? 'family'
-      : 'my-wishlist';
+    route.screen === 'picks'
+      ? 'picks'
+      : route.screen === 'my-wishlist' ||
+          route.screen === 'add-gift' ||
+          route.screen === 'edit-gift'
+        ? 'my-wishlist'
+        : 'family';
 
   const handleTabSelect = (tab: MainTab) => {
     setFlashMessage(null);
     if (tab === 'family') {
       navigate({ screen: 'family' });
+    } else if (tab === 'picks') {
+      navigate({ screen: 'picks' });
     } else {
       navigate({ screen: 'my-wishlist' });
     }
@@ -107,16 +150,171 @@ function AuthenticatedWorkspace({ onSignOut }: AuthenticatedWorkspaceProps) {
 
   const familyName = familyData?.family.name ?? 'Family Christmas Wishlist';
   const viewerName = familyData?.viewer.displayName ?? 'Family member';
+  const pickCount = myPicksQuery.data
+    ? myPicksQuery.data.length
+    : (familyData?.viewer.pickCount ?? 0);
 
   const editingGift =
     route.screen === 'edit-gift'
-      ? wishlistQuery.data?.gifts.find((g) => g.id === route.giftId) ?? null
+      ? myWishlistQuery.data?.gifts.find((g) => g.id === route.giftId) ?? null
       : null;
+
+  const reconcileGiftPicked = (gift: GiftItem, pickId: string) => {
+    const recipientId = relativeWishlistQuery.data?.memberId ?? relativeMemberId;
+    if (!recipientId) return;
+
+    const recipientName =
+      relativeWishlistQuery.data?.displayName ??
+      familyData?.relatives.find((r) => r.memberId === recipientId)?.displayName ??
+      'Relative';
+
+    relativeWishlistQuery.mutateData((prev) => {
+      if (!prev || prev.memberId !== recipientId) return prev;
+      return {
+        ...prev,
+        viewerPickedGiftId: gift.id,
+        gifts: prev.gifts.map((item) =>
+          item.id === gift.id
+            ? { ...item, status: 'picked_by_you', canPick: false, pickId }
+            : { ...item, canPick: false }
+        ),
+      };
+    });
+
+    familyQuery.mutateData((prev) => {
+      if (!prev) return prev;
+      const alreadyMarked = prev.relatives.some(
+        (r) => r.memberId === recipientId && r.pickedByViewer
+      );
+      return {
+        ...prev,
+        viewer: {
+          ...prev.viewer,
+          pickCount: alreadyMarked ? prev.viewer.pickCount : prev.viewer.pickCount + 1,
+        },
+        relatives: prev.relatives.map((r) =>
+          r.memberId === recipientId ? { ...r, pickedByViewer: true } : r
+        ),
+      };
+    });
+
+    myPicksQuery.mutateData((prev) => {
+      if (!prev) return prev;
+      const nextItem: PickedGiftSummary = {
+        pickId,
+        pickedAt: new Date().toISOString(),
+        recipientMemberId: recipientId,
+        recipientDisplayName: recipientName,
+        giftId: gift.id,
+        giftName: gift.name,
+        giftNote: gift.note,
+        storeUrl: gift.storeUrl,
+      };
+      const filtered = prev.filter(
+        (p) => p.pickId !== pickId && p.recipientMemberId !== recipientId
+      );
+      return [...filtered, nextItem].sort((a, b) =>
+        a.recipientDisplayName.localeCompare(b.recipientDisplayName)
+      );
+    });
+  };
+
+  const reconcileGiftUndone = (recipientId: string, giftId: string, pickId?: string) => {
+    relativeWishlistQuery.mutateData((prev) => {
+      if (!prev || prev.memberId !== recipientId) return prev;
+      return {
+        ...prev,
+        viewerPickedGiftId: null,
+        gifts: prev.gifts.map((item) =>
+          item.id === giftId
+            ? { ...item, status: 'available', canPick: !prev.isOwnWishlist, pickId: null }
+            : { ...item, canPick: !prev.isOwnWishlist && item.status === 'available' }
+        ),
+      };
+    });
+
+    familyQuery.mutateData((prev) => {
+      if (!prev) return prev;
+      const wasMarked = prev.relatives.some(
+        (r) => r.memberId === recipientId && r.pickedByViewer
+      );
+      return {
+        ...prev,
+        viewer: {
+          ...prev.viewer,
+          pickCount: wasMarked ? Math.max(0, prev.viewer.pickCount - 1) : prev.viewer.pickCount,
+        },
+        relatives: prev.relatives.map((r) =>
+          r.memberId === recipientId ? { ...r, pickedByViewer: false } : r
+        ),
+      };
+    });
+
+    myPicksQuery.mutateData((prev) => {
+      if (!prev) return prev;
+      return prev.filter(
+        (p) =>
+          (pickId ? p.pickId !== pickId : true) &&
+          p.giftId !== giftId &&
+          p.recipientMemberId !== recipientId
+      );
+    });
+  };
+
+  const reconcileOwnGiftSaved = (savedGift: GiftItem, isEditing: boolean) => {
+    myWishlistQuery.mutateData((prev) => {
+      if (!prev) return prev;
+      const exists = prev.gifts.some((g) => g.id === savedGift.id);
+      const nextGifts =
+        isEditing || exists
+          ? prev.gifts.map((g) => (g.id === savedGift.id ? savedGift : g))
+          : [...prev.gifts, savedGift];
+      return {
+        ...prev,
+        gifts: nextGifts,
+      };
+    });
+
+    if (!isEditing) {
+      familyQuery.mutateData((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          viewer: {
+            ...prev.viewer,
+            giftCount: prev.viewer.giftCount + 1,
+          },
+        };
+      });
+    }
+  };
+
+  const reconcileOwnGiftRemoved = (giftId: string) => {
+    myWishlistQuery.mutateData((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        gifts: prev.gifts.filter((g) => g.id !== giftId),
+      };
+    });
+
+    familyQuery.mutateData((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        viewer: {
+          ...prev.viewer,
+          giftCount: Math.max(0, prev.viewer.giftCount - 1),
+        },
+      };
+    });
+  };
 
   return (
     <AppShell
       familyName={familyName}
       viewerName={viewerName}
+      pickCount={pickCount}
       activeTab={activeTab}
       onSelectTab={handleTabSelect}
       onSignOut={() => void handleSignOut()}
@@ -134,6 +332,24 @@ function AuthenticatedWorkspace({ onSignOut }: AuthenticatedWorkspaceProps) {
           onManageFamily={() => navigate({ screen: 'manage-family' })}
           onSelectRelative={(memberId) => navigate({ screen: 'relative', memberId })}
           onGoToMyWishlist={() => navigate({ screen: 'my-wishlist' })}
+        />
+      ) : null}
+
+      {route.screen === 'picks' ? (
+        <GiftsPickedScreen
+          picks={myPicksQuery.data}
+          isLoading={myPicksQuery.isLoading}
+          isRefreshing={myPicksQuery.isRefreshing}
+          error={myPicksQuery.error}
+          isStaleOffline={myPicksQuery.isStaleOffline}
+          onRefresh={async () => {
+            await Promise.all([myPicksQuery.refreshNow(), familyQuery.refreshNow()]);
+          }}
+          onBrowseFamily={() => navigate({ screen: 'family' })}
+          onOpenRelative={(memberId) => navigate({ screen: 'relative', memberId })}
+          onPickUndone={(pick) => {
+            reconcileGiftUndone(pick.recipientMemberId, pick.giftId, pick.pickId);
+          }}
         />
       ) : null}
 
@@ -158,28 +374,38 @@ function AuthenticatedWorkspace({ onSignOut }: AuthenticatedWorkspaceProps) {
 
       {route.screen === 'relative' ? (
         <RelativeWishlistScreen
-          wishlist={wishlistQuery.data}
-          isLoading={wishlistQuery.isLoading}
-          isRefreshing={wishlistQuery.isRefreshing}
-          error={wishlistQuery.error}
-          isStaleOffline={wishlistQuery.isStaleOffline}
+          wishlist={relativeWishlistQuery.data}
+          isLoading={relativeWishlistQuery.isLoading}
+          isRefreshing={relativeWishlistQuery.isRefreshing}
+          error={relativeWishlistQuery.error}
+          isStaleOffline={relativeWishlistQuery.isStaleOffline}
           onRefresh={async () => {
-            await Promise.all([wishlistQuery.refreshNow(), familyQuery.refreshNow()]);
+            await Promise.all([
+              relativeWishlistQuery.refreshNow(),
+              myPicksQuery.refreshNow(),
+              familyQuery.refreshNow(),
+            ]);
           }}
           onBackToFamily={() => navigate({ screen: 'family' })}
+          onGiftPicked={reconcileGiftPicked}
+          onGiftUndone={(gift) => {
+            if (relativeMemberId) {
+              reconcileGiftUndone(relativeMemberId, gift.id, gift.pickId ?? undefined);
+            }
+          }}
         />
       ) : null}
 
       {route.screen === 'my-wishlist' ? (
         <MyWishlistScreen
-          wishlist={wishlistQuery.data}
-          isLoading={wishlistQuery.isLoading}
-          error={wishlistQuery.error}
-          isStaleOffline={wishlistQuery.isStaleOffline}
+          wishlist={myWishlistQuery.data}
+          isLoading={myWishlistQuery.isLoading}
+          error={myWishlistQuery.error}
+          isStaleOffline={myWishlistQuery.isStaleOffline}
           flashMessage={flashMessage}
           onDismissFlash={() => setFlashMessage(null)}
           onRefresh={async () => {
-            await Promise.all([wishlistQuery.refreshNow(), familyQuery.refreshNow()]);
+            await Promise.all([myWishlistQuery.refreshNow(), familyQuery.refreshNow()]);
           }}
           onAddGift={() => {
             setFlashMessage(null);
@@ -189,12 +415,13 @@ function AuthenticatedWorkspace({ onSignOut }: AuthenticatedWorkspaceProps) {
             setFlashMessage(null);
             navigate({ screen: 'edit-gift', giftId: gift.id });
           }}
+          onGiftRemoved={reconcileOwnGiftRemoved}
         />
       ) : null}
 
       {route.screen === 'add-gift' || route.screen === 'edit-gift' ? (
         route.screen === 'edit-gift' && !editingGift ? (
-          wishlistQuery.isLoading ? (
+          myWishlistQuery.isLoading ? (
             <SkeletonList rows={2} label="Loading gift details" />
           ) : (
             <NoticeBanner
@@ -214,10 +441,11 @@ function AuthenticatedWorkspace({ onSignOut }: AuthenticatedWorkspaceProps) {
         ) : (
           <GiftFormScreen
             existingGift={editingGift}
-            onSaved={async (message) => {
+            onSaved={(message, savedGift) => {
+              reconcileOwnGiftSaved(savedGift, route.screen === 'edit-gift');
               setFlashMessage(message);
               navigate({ screen: 'my-wishlist' });
-              await Promise.all([wishlistQuery.refreshNow(), familyQuery.refreshNow()]);
+              void Promise.all([myWishlistQuery.refreshNow(), familyQuery.refreshNow()]);
             }}
             onCancel={() => navigate({ screen: 'my-wishlist' })}
           />

@@ -10,7 +10,7 @@ import { TextAreaField, TextField } from '../../ui/components/TextField';
 
 interface GiftFormScreenProps {
   existingGift: GiftItem | null;
-  onSaved: (message: string) => Promise<void>;
+  onSaved: (message: string, savedGift: GiftItem) => Promise<void> | void;
   onCancel: () => void;
 }
 
@@ -43,11 +43,11 @@ export function GiftFormScreen({
     setIsSaving(true);
     try {
       if (isEditing && existingGift) {
-        await wishlist.updateGift(existingGift.id, validation.value);
-        await onSaved(`Updated "${validation.value.name}".`);
+        const updated = await wishlist.updateGift(existingGift.id, validation.value);
+        await onSaved(`Updated "${validation.value.name}".`, updated);
       } else {
-        await wishlist.addGift(validation.value);
-        await onSaved(`Added "${validation.value.name}" to your wishlist.`);
+        const created = await wishlist.addGift(validation.value);
+        await onSaved(`Added "${validation.value.name}" to your wishlist.`, created);
       }
     } catch (err) {
       setSubmitError(

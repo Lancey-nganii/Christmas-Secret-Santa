@@ -11,6 +11,7 @@ import {
 } from './platform/lifecycle';
 import { SupabaseAuthGateway } from './supabase/authGateway';
 import { SupabaseMemberManagementGateway } from './supabase/memberManagementGateway';
+import { SupabaseRealtimeGateway } from './supabase/realtimeGateway';
 import { SupabaseWishlistGateway } from './supabase/wishlistGateway';
 
 export function createAppServices(): AppServices {
@@ -27,6 +28,7 @@ export function createAppServices(): AppServices {
     auth: new SupabaseAuthGateway(),
     wishlist: new SupabaseWishlistGateway(),
     members: new SupabaseMemberManagementGateway(),
+    realtime: new SupabaseRealtimeGateway(),
     lifecycle: isNative ? new CapacitorLifecycleAdapter() : new BrowserLifecycleAdapter(),
     externalLinks: isNative
       ? new CapacitorExternalLinkAdapter()

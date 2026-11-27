@@ -3,7 +3,10 @@ import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { App } from '../src/app/App';
 import { AppError } from '../src/domain/errors';
-import { createPreviewServices } from '../src/infrastructure/devPreview/previewServices';
+import {
+  createPreviewServices,
+  emitPreviewRealtimeEvent,
+} from '../src/infrastructure/devPreview/previewServices';
 
 describe('Family Christmas Wishlist UI flows', () => {
   it('supports username + password sign-in, visibility toggle, and plain-language errors', async () => {
@@ -191,6 +194,74 @@ describe('Family Christmas Wishlist UI flows', () => {
     expect(
       screen.getByRole('button', { name: /sign out and try another username/i })
     ).toBeInTheDocument();
+  });
+
+  it('shows Gifts Picked across relatives, links to the relative list, and supports Undo', async () => {
+    const user = userEvent.setup();
+    const services = createPreviewServices('family');
+    render(<App services={services} />);
+
+    await user.click(await screen.findByRole('button', { name: /gifts picked/i }));
+
+    expect(await screen.findByRole('heading', { name: /^gifts picked$/i })).toBeInTheDocument();
+    expect(await screen.findByText('Stainless travel thermos')).toBeInTheDocument();
+    expect(screen.getByText('For Dad')).toBeInTheDocument();
+
+    // Open relative wishlist directly from Gifts Picked
+    await user.click(screen.getByRole('button', { name: /view list/i }));
+    expect(await screen.findByRole('heading', { name: /dad’s wishlist/i })).toBeInTheDocument();
+
+    // Return to Gifts Picked and Undo
+    await user.click(screen.getByRole('button', { name: /gifts picked/i }));
+    await user.click(
+      await screen.findByRole('button', { name: /undo pick for dad: stainless travel thermos/i })
+    );
+
+    expect(await screen.findByText('No gifts picked yet')).toBeInTheDocument();
+    expect(screen.queryByText('Stainless travel thermos')).not.toBeInTheDocument();
+  });
+
+  it('refreshes the active wishlist immediately when a realtime broadcast arrives', async () => {
+    const user = userEvent.setup();
+    const base = createPreviewServices('family');
+    let remotePicked = false;
+
+    const realtimeServices = {
+      ...base,
+      wishlist: {
+        ...base.wishlist,
+        async getWishlist(memberId: string) {
+          const view = await base.wishlist.getWishlist(memberId);
+          if (memberId === 'member-mom' && remotePicked) {
+            return {
+              ...view,
+              gifts: view.gifts.map((g) =>
+                g.id === 'gift-mom-2'
+                  ? { ...g, status: 'already_picked' as const, canPick: false }
+                  : g
+              ),
+            };
+          }
+          return view;
+        },
+      },
+    };
+
+    render(<App services={realtimeServices} />);
+    await user.click(await screen.findByRole('button', { name: /mom/i }));
+    expect(await screen.findByRole('heading', { name: /mom’s wishlist/i })).toBeInTheDocument();
+    expect(screen.getAllByText('Already picked')).toHaveLength(1);
+
+    // Another relative picks a gift on Mom's list and Realtime triggers an invalidation event
+    remotePicked = true;
+    emitPreviewRealtimeEvent(realtimeServices.realtime, {
+      scope: 'wishlist',
+      memberId: 'member-mom',
+    });
+
+    await waitFor(() => {
+      expect(screen.getAllByText('Already picked')).toHaveLength(2);
+    });
   });
 
   it('shows a readable fallback card instead of a blank screen on startup errors', async () => {

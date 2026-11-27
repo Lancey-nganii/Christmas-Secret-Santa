@@ -16,6 +16,8 @@ interface RelativeWishlistScreenProps {
   isStaleOffline: boolean;
   onRefresh: () => Promise<void>;
   onBackToFamily: () => void;
+  onGiftPicked?: (gift: GiftItem, pickId: string) => void;
+  onGiftUndone?: (gift: GiftItem) => void;
 }
 
 export function RelativeWishlistScreen({
@@ -26,6 +28,8 @@ export function RelativeWishlistScreen({
   isStaleOffline,
   onRefresh,
   onBackToFamily,
+  onGiftPicked,
+  onGiftUndone,
 }: RelativeWishlistScreenProps) {
   const { wishlist: wishlistGateway, externalLinks } = useServices();
   const [busyGiftId, setBusyGiftId] = useState<string | null>(null);
@@ -44,18 +48,21 @@ export function RelativeWishlistScreen({
           tone: 'success',
           message: `You picked "${gift.name}". Nobody else in the family can see that it was you.`,
         });
+        onGiftPicked?.(gift, result.pickId);
+        void onRefresh();
       } else if (result.outcome === 'already_picked') {
         setFeedback({
           tone: 'error',
           message: `"${gift.name}" was just picked by another relative.`,
         });
+        await onRefresh();
       } else if (result.outcome === 'recipient_limit') {
         setFeedback({
           tone: 'info',
           message: `You already picked a gift for ${wishlist?.displayName ?? 'this relative'}. Undo that pick first if you want to switch.`,
         });
+        await onRefresh();
       }
-      await onRefresh();
     } catch (err) {
       if (isNetworkError(err)) {
         setFeedback({
@@ -84,6 +91,7 @@ export function RelativeWishlistScreen({
     setFeedback(null);
     try {
       const result = await wishlistGateway.undoPick(gift.pickId);
+      onGiftUndone?.(gift);
       if (result.outcome === 'undone') {
         setFeedback({
           tone: 'info',
@@ -95,7 +103,7 @@ export function RelativeWishlistScreen({
           message: 'That pick was already released. Showing the latest list.',
         });
       }
-      await onRefresh();
+      void onRefresh();
     } catch (err) {
       if (isNetworkError(err)) {
         setFeedback({

@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from 'react';
 export type AppRoute =
   | { readonly screen: 'family' }
   | { readonly screen: 'manage-family' }
+  | { readonly screen: 'picks' }
   | { readonly screen: 'relative'; readonly memberId: string }
   | { readonly screen: 'my-wishlist' }
   | { readonly screen: 'add-gift' }
@@ -11,6 +12,9 @@ export type AppRoute =
 export function parseRoute(pathname: string): AppRoute {
   const clean = pathname.replace(/\/+$/, '') || '/';
 
+  if (clean === '/picks') {
+    return { screen: 'picks' };
+  }
   if (clean === '/my-wishlist') {
     return { screen: 'my-wishlist' };
   }
@@ -41,6 +45,8 @@ export function routeToPath(route: AppRoute): string {
       return '/family';
     case 'manage-family':
       return '/family/manage';
+    case 'picks':
+      return '/picks';
     case 'relative':
       return `/family/${encodeURIComponent(route.memberId)}`;
     case 'my-wishlist':

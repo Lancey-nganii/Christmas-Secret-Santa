@@ -11,6 +11,23 @@ export interface ViewerProfile {
   readonly username: string;
   readonly isOrganizer: boolean;
   readonly giftCount: number;
+  readonly pickCount: number;
+}
+
+export interface PickedGiftSummary {
+  readonly pickId: string;
+  readonly pickedAt: string;
+  readonly recipientMemberId: string;
+  readonly recipientDisplayName: string;
+  readonly giftId: string;
+  readonly giftName: string;
+  readonly giftNote: string | null;
+  readonly storeUrl: string | null;
+}
+
+export interface FamilySyncEvent {
+  readonly scope: 'wishlist' | 'family';
+  readonly memberId: string | null;
 }
 
 export interface FamilyMemberAccount {

@@ -1,13 +1,14 @@
-import { Gift, LogOut, Users } from 'lucide-react';
+import { Gift, LogOut, ShoppingBag, Users } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Button } from '../../ui/components/Button';
 import { HollyEmblem } from '../../ui/icons/HollyEmblem';
 
-export type MainTab = 'family' | 'my-wishlist';
+export type MainTab = 'family' | 'picks' | 'my-wishlist';
 
 interface AppShellProps {
   familyName: string;
   viewerName: string;
+  pickCount?: number;
   activeTab: MainTab;
   onSelectTab: (tab: MainTab) => void;
   onSignOut: () => void;
@@ -18,6 +19,7 @@ interface AppShellProps {
 export function AppShell({
   familyName,
   viewerName,
+  pickCount = 0,
   activeTab,
   onSelectTab,
   onSignOut,
@@ -59,7 +61,23 @@ export function AppShell({
               onClick={() => onSelectTab('family')}
             >
               <Users size={18} strokeWidth={2} aria-hidden="true" />
-              <span>Family</span>
+              <span className="tab-button-label">Family</span>
+            </button>
+            <button
+              type="button"
+              aria-current={activeTab === 'picks' ? 'page' : undefined}
+              className="tab-button"
+              onClick={() => onSelectTab('picks')}
+            >
+              <ShoppingBag size={18} strokeWidth={2} aria-hidden="true" />
+              <span className="tab-button-label">
+                <span>Gifts Picked</span>
+                {pickCount > 0 ? (
+                  <span className="tab-count tabular-count" aria-label={`${pickCount} picked`}>
+                    {pickCount}
+                  </span>
+                ) : null}
+              </span>
             </button>
             <button
               type="button"
@@ -68,7 +86,7 @@ export function AppShell({
               onClick={() => onSelectTab('my-wishlist')}
             >
               <Gift size={18} strokeWidth={2} aria-hidden="true" />
-              <span>My Wishlist</span>
+              <span className="tab-button-label">My Wishlist</span>
             </button>
           </nav>
         </header>

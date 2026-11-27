@@ -1,10 +1,12 @@
 import type {
   FamilyMemberAccount,
   FamilyOverview,
+  FamilySyncEvent,
   GiftItem,
   NormalizedGiftInput,
   NormalizedNewMemberInput,
   PickGiftResult,
+  PickedGiftSummary,
   UndoPickResult,
   WishlistView,
 } from './models';
@@ -25,11 +27,22 @@ export interface AuthGateway {
 export interface WishlistGateway {
   getFamily(): Promise<FamilyOverview>;
   getWishlist(memberId: string): Promise<WishlistView>;
+  getMyPicks(): Promise<readonly PickedGiftSummary[]>;
   addGift(input: NormalizedGiftInput): Promise<GiftItem>;
   updateGift(giftId: string, input: NormalizedGiftInput): Promise<GiftItem>;
   removeGift(giftId: string): Promise<void>;
   pickGift(giftId: string): Promise<PickGiftResult>;
   undoPick(pickId: string): Promise<UndoPickResult>;
+}
+
+export interface RealtimeGateway {
+  subscribeToFamily(
+    familyId: string,
+    handlers: {
+      readonly onSync: (event: FamilySyncEvent) => void;
+      readonly onReconnect?: () => void;
+    }
+  ): () => void;
 }
 
 export interface MemberManagementGateway {
@@ -54,6 +67,7 @@ export interface AppServices {
   readonly auth: AuthGateway;
   readonly wishlist: WishlistGateway;
   readonly members: MemberManagementGateway;
+  readonly realtime: RealtimeGateway;
   readonly lifecycle: AppLifecyclePort;
   readonly externalLinks: ExternalLinkPort;
   readonly isPreviewMode: boolean;

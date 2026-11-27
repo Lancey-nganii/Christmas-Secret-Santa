@@ -60,6 +60,9 @@ export class SupabaseAuthGateway implements AuthGateway {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session?.access_token) {
+        void supabase.realtime.setAuth(session.access_token);
+      }
       listener(toSessionUser(session?.user ?? null));
     });
     return () => subscription.unsubscribe();

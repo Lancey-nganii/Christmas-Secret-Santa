@@ -11,6 +11,7 @@ export interface SynchronizedResourceState<T> {
   readonly error: AppError | null;
   readonly isStaleOffline: boolean;
   readonly refreshNow: () => Promise<void>;
+  readonly mutateData: (updater: (prev: T | null) => T | null) => void;
 }
 
 export function useSynchronizedResource<T>(
@@ -50,6 +51,7 @@ export function useSynchronizedResource<T>(
         const result = await fetcherRef.current();
         if (reqId !== requestIdRef.current) return;
 
+        dataRef.current = result;
         setData(result);
         setError(null);
         setIsStaleOffline(false);
@@ -75,6 +77,7 @@ export function useSynchronizedResource<T>(
   );
 
   useEffect(() => {
+    dataRef.current = null;
     setData(null);
     setError(null);
     setIsStaleOffline(false);
@@ -141,6 +144,15 @@ export function useSynchronizedResource<T>(
     await runFetch('background');
   }, [runFetch]);
 
+  const mutateData = useCallback((updater: (prev: T | null) => T | null) => {
+    requestIdRef.current += 1;
+    setData((prev) => {
+      const next = updater(prev);
+      dataRef.current = next;
+      return next;
+    });
+  }, []);
+
   return {
     data,
     isLoading: isLoading || (enabled && data === null && error === null),
@@ -148,5 +160,6 @@ export function useSynchronizedResource<T>(
     error,
     isStaleOffline,
     refreshNow,
+    mutateData,
   };
 }
