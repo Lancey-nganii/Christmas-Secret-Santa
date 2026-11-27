@@ -60,7 +60,7 @@ npm run build
 2. [`.env.production`](.env.production) already provides the public Supabase client URL and publishable key (`sb_publishable_*`) so Vercel builds work out of the box. To target a different Supabase project, override these in **Project Settings -> Environment Variables**:
    - `VITE_SUPABASE_URL`
    - `VITE_SUPABASE_PUBLISHABLE_KEY`
-3. [`vercel.json`](vercel.json) rewrites all routes cleanly to `/index.html`.
+3. [`vercel.json`](vercel.json) rewrites non-API routes to `/index.html` and schedules a twice-weekly Vercel Cron (`0 8 * * 1,4`) hitting [`/api/keep-alive`](api/keep-alive.ts), which queries `public.app_heartbeat` uncached so Supabase Free Tier stays awake. You can visit `/api/keep-alive` directly in a browser anytime to verify it returns HTTP `200` (`{ "ok": true, "status": "awake" }`).
 
 ## Android APK Setup & Phone Installation
 
