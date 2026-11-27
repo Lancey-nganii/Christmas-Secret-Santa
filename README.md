@@ -56,9 +56,9 @@ npm run build
 ## Deploying to Vercel
 
 1. Import this GitHub repository in Vercel (Vite preset).
-2. Add these two **Environment Variables** in Vercel Project Settings (they are intentionally public client variables; `service_role` keys are never exposed):
-   - `VITE_SUPABASE_URL` = `https://xjaucojgcuogzsjxtbds.supabase.co`
-   - `VITE_SUPABASE_PUBLISHABLE_KEY` = `sb_publishable_BXdsdhhDR-r3fwcKvZjg4g_D8uj60uj`
+2. [`.env.production`](.env.production) already provides the public Supabase client URL and publishable key (`sb_publishable_*`) so Vercel builds work out of the box. To target a different Supabase project, override these in **Project Settings -> Environment Variables**:
+   - `VITE_SUPABASE_URL`
+   - `VITE_SUPABASE_PUBLISHABLE_KEY`
 3. [`vercel.json`](vercel.json) rewrites all routes cleanly to `/index.html`.
 
 ## Android APK Setup & Phone Installation

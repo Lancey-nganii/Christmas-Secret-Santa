@@ -1,6 +1,6 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { App } from '../src/app/App';
 import { AppError } from '../src/domain/errors';
 import { createPreviewServices } from '../src/infrastructure/devPreview/previewServices';
@@ -191,5 +191,29 @@ describe('Family Christmas Wishlist UI flows', () => {
     expect(
       screen.getByRole('button', { name: /sign out and try another username/i })
     ).toBeInTheDocument();
+  });
+
+  it('shows a readable fallback card instead of a blank screen on startup errors', async () => {
+    const base = createPreviewServices('family');
+    const brokenServices = {
+      ...base,
+      auth: {
+        ...base.auth,
+        onAuthChange() {
+          throw new Error('Missing VITE_SUPABASE_URL or VITE_SUPABASE_PUBLISHABLE_KEY environment variables.');
+        },
+      },
+    };
+
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      render(<App services={brokenServices} />);
+      expect(
+        await screen.findByRole('heading', { name: /unable to start family christmas wishlist/i })
+      ).toBeInTheDocument();
+      expect(screen.getByRole('alert')).toHaveTextContent(/VITE_SUPABASE_URL/i);
+    } finally {
+      consoleSpy.mockRestore();
+    }
   });
 });

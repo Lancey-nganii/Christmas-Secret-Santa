@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { Component, useCallback, useState, type ErrorInfo, type ReactNode } from 'react';
 import { ServiceProvider, useServices } from '../application/ServiceContext';
 import { useAuthSession } from '../application/useAuthSession';
 import { useSynchronizedResource } from '../application/useSynchronizedResource';
@@ -247,14 +247,54 @@ function AppRoot() {
   return <AuthenticatedWorkspace onSignOut={session.signOut} />;
 }
 
+interface AppErrorBoundaryState {
+  readonly error: Error | null;
+}
+
+class AppErrorBoundary extends Component<{ children: ReactNode }, AppErrorBoundaryState> {
+  override state: AppErrorBoundaryState = { error: null };
+
+  static getDerivedStateFromError(error: Error): AppErrorBoundaryState {
+    return { error };
+  }
+
+  override componentDidCatch(_error: Error, _info: ErrorInfo) {
+    // Error is rendered cleanly in the fallback UI below.
+  }
+
+  override render() {
+    if (this.state.error) {
+      return (
+        <main className="app-page">
+          <div className="app-column">
+            <div className="surface-card section-stack">
+              <HollyEmblem size={42} backdrop="peach" />
+              <h1 className="section-heading">Unable to start Family Christmas Wishlist</h1>
+              <NoticeBanner tone="error" message={this.state.error.message} />
+              <div>
+                <Button onClick={() => window.location.reload()} data-primary-action>
+                  Reload page
+                </Button>
+              </div>
+            </div>
+          </div>
+        </main>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 interface AppProps {
   services: AppServices;
 }
 
 export function App({ services }: AppProps) {
   return (
-    <ServiceProvider value={services}>
-      <AppRoot />
-    </ServiceProvider>
+    <AppErrorBoundary>
+      <ServiceProvider value={services}>
+        <AppRoot />
+      </ServiceProvider>
+    </AppErrorBoundary>
   );
 }
